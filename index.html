@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crupier Shift Tracker</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --card-bg: #1e293b;
+            --accent: #10b981;
+            --text: #f8fafc;
+            --muted: #94a3b8;
+            --break-bg: #334155;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text);
+            margin: 0;
+            padding: 16px;
+            display: flex;
+            justify-content: center;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 480px;
+        }
+
+        h1 {
+            text-align: center;
+            font-size: 1.5rem;
+            margin-bottom: 20px;
+            color: var(--accent);
+        }
+
+        .card {
+            background-color: var(--card-bg);
+            border-radius: 12px;
+            padding: 16px;
+            margin-bottom: 16px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+        }
+
+        .form-group {
+            margin-bottom: 12px;
+        }
+
+        label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--muted);
+            margin-bottom: 4px;
+        }
+
+        input, select {
+            width: 100%;
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #475569;
+            background-color: #0f172a;
+            color: var(--text);
+            font-size: 1rem;
+            box-sizing: border-box;
+        }
+
+        button {
+            width: 100%;
+            padding: 12px;
+            border-radius: 8px;
+            border: none;
+            background-color: var(--accent);
+            color: #000;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+            margin-top: 8px;
+        }
+
+        button:active {
+            opacity: 0.9;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+            text-align: center;
+        }
+
+        .stat-box {
+            background: #0f172a;
+            padding: 12px;
+            border-radius: 8px;
+        }
+
+        .stat-number {
+            font-size: 1.8rem;
+            font-weight: bold;
+            color: var(--accent);
+        }
+
+        .timeline {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .item {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            background-color: #0f172a;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            border-left: 4px solid var(--accent);
+            transition: all 0.2s;
+        }
+
+        .item.break {
+            border-left-color: #f59e0b;
+            background-color: var(--break-bg);
+        }
+
+        .item.completed {
+            opacity: 0.4;
+            text-decoration: line-through;
+        }
+
+        .time {
+            font-weight: bold;
+            font-size: 0.95rem;
+        }
+
+        .label {
+            font-size: 0.85rem;
+            padding: 4px 8px;
+            border-radius: 4px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>🎰 Control de Turnos Crupier</h1>
+
+    <div class="card">
+        <div class="form-group">
+            <label for="startTime">Hora de Inicio</label>
+            <input type="time" id="startTime" value="16:00">
+        </div>
+        <div class="form-group">
+            <label for="endTime">Hora de Salida</label>
+            <input type="time" id="endTime" value="00:00">
+        </div>
+        <div class="form-group">
+            <label for="shiftDuration">Minutos por rotación</label>
+            <input type="number" id="shiftDuration" value="30">
+        </div>
+        <div class="form-group">
+            <label for="workPattern">Frecuencia de descanso</label>
+            <select id="workPattern">
+                <option value="3">3 Mesas + 1 Descanso</option>
+                <option value="4">4 Mesas + 1 Descanso</option>
+                <option value="2">2 Mesas + 1 Descanso</option>
+                <option value="0">Sin descansos automáticos</option>
+            </select>
+        </div>
+        <button onclick="calcularTurnos()">Calcular Jornada</button>
+    </div>
+
+    <div class="card" id="summaryCard" style="display:none;">
+        <div class="stats">
+            <div class="stat-box">
+                <div class="stat-number" id="totalTables">0</div>
+                <div>Mesas / Turnos</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-number" id="totalBreaks" style="color:#f59e0b;">0</div>
+                <div>Descansos</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" id="scheduleCard" style="display:none;">
+        <ul class="timeline" id="timeline"></ul>
+    </div>
+</div>
+
+<script>
+    function calcularTurnos() {
+        const startStr = document.getElementById('startTime').value;
+        const endStr = document.getElementById('endTime').value;
+        const durationMin = parseInt(document.getElementById('shiftDuration').value);
+        const pattern = parseInt(document.getElementById('workPattern').value);
+
+        if (!startStr || !endStr) return;
+
+        let start = new Date(`1970-01-01T${startStr}:00`);
+        let end = new Date(`1970-01-01T${endStr}:00`);
+
+        // Si la hora de salida es menor, asumimos turno nocturno que cruza medianoche
+        if (end <= start) {
+            end.setDate(end.getDate() + 1);
+        }
+
+        const timelineEl = document.getElementById('timeline');
+        timelineEl.innerHTML = '';
+
+        let current = new Date(start);
+        let mesaCount = 0;
+        let breakCount = 0;
+        let workStreak = 0;
+
+        while (current < end) {
+            let next = new Date(current.getTime() + durationMin * 60000);
+            if (next > end) break;
+
+            const timeFormat = { hour: '2-digit', minute: '2-digit', hour12: false };
+            const timeRange = `${current.toLocaleTimeString([], timeFormat)} - ${next.toLocaleTimeString([], timeFormat)}`;
+            
+            let isBreak = false;
+            if (pattern > 0 && workStreak === pattern) {
+                isBreak = true;
+                workStreak = 0;
+                breakCount++;
+            } else {
+                workStreak++;
+                mesaCount++;
+            }
+
+            const li = document.createElement('li');
+            li.className = `item ${isBreak ? 'break' : ''}`;
+            li.onclick = () => li.classList.toggle('completed');
+            
+            li.innerHTML = `
+                <span class="time">${timeRange}</span>
+                <span class="label">${isBreak ? '☕ Descanso' : `🎲 Mesa ${mesaCount}`}</span>
+            `;
+
+            timelineEl.appendChild(li);
+            current = next;
+        }
+
+        document.getElementById('totalTables').textContent = mesaCount;
+        document.getElementById('totalBreaks').textContent = breakCount;
+        
+        document.getElementById('summaryCard').style.display = 'block';
+        document.getElementById('scheduleCard').style.display = 'block';
+    }
+</script>
+
+</body>
+</html>
